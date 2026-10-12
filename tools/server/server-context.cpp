@@ -2959,6 +2959,15 @@ private:
                         break;
                     }
 
+                    if (!params_base.jev_dir.empty()) {
+                        try {
+                            server_slot_lora_save(filepath, slot->lora.empty() ? params_base.lora_adapters : slot->lora);
+                        } catch (const std::exception & err) {
+                            send_error(task, std::string("Unable to save slot adapter metadata: ") + err.what(), ERROR_TYPE_SERVER);
+                            break;
+                        }
+                    }
+
                     const int64_t t_end = ggml_time_us();
                     const double t_save_ms = (t_end - t_start) / 1000.0;
 
@@ -2994,6 +3003,10 @@ private:
 
                     size_t nread = 0;
                     try {
+                        std::vector<common_adapter_lora_info> saved_loras;
+                        if (!params_base.jev_dir.empty()) {
+                            saved_loras = server_slot_lora_load(filepath, params_base.lora_adapters);
+                        }
                         size_t n_packed = 0;
                         llama_tokens packed;
                         nread = llama_state_seq_load_file(ctx_tgt, filepath.c_str(), slot->id, nullptr, 0, &n_packed);
@@ -3018,6 +3031,9 @@ private:
 
                         slot->prompt.clear();
                         slot->prompt.tokens = std::move(restored);
+                        if (!params_base.jev_dir.empty()) {
+                            slot->lora = std::move(saved_loras);
+                        }
                     } catch (const std::exception & err) {
                         slot->prompt_clear();
                         send_error(task, std::string("Unable to restore slot: ") + err.what(), ERROR_TYPE_INVALID_REQUEST);
