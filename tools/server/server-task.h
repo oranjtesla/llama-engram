@@ -190,6 +190,7 @@ struct server_task {
     // used by SERVER_TASK_TYPE_DECISION
     // where to read the model output of each option, exactly one of the two lists is used
     struct decision {
+        bool jev = false; // read the JEV head from the last token
         std::vector<llama_token> labels;       // logits of these tokens, at the last prompt token
         std::vector<int32_t>     label_groups; // if set, number of labels per output, the output is their max
         std::vector<int32_t>     markers;      // embeddings[column] at these prompt positions
@@ -238,7 +239,7 @@ struct server_task {
             case SERVER_TASK_TYPE_RERANK:
                 return true;
             case SERVER_TASK_TYPE_DECISION:
-                return !decision.markers.empty() || !decision.order.empty();
+                return !decision.jev && (!decision.markers.empty() || !decision.order.empty());
             default:
                 return false;
         }

@@ -5,9 +5,11 @@
 #include "server-chat.h"
 #include "server-common.h"
 #include "server-decision.h"
+#include "../../src/llama-ext.h" // staging API: JEV hidden-state readout
 #include "server-http.h"
 #include "server-task.h"
 #include "server-queue.h"
+#include "server-slot-lora.h"
 #include "server-schema.h"
 #include "server-stream.h"
 
@@ -1026,6 +1028,7 @@ public:
     }
 
     server_decision_context decision;
+    bool jev_nextn_unmasked = false;
 
     server_queue    queue_tasks;
     server_response queue_results;
@@ -1306,7 +1309,7 @@ private:
         vocab = llama_model_get_vocab(model_tgt);
 
         try {
-            decision.init(model_tgt);
+            decision.init(model_tgt, params_base.jev_dir);
         } catch (const std::exception & e) {
             SRV_ERR("failed to init decision model: %s\n", e.what());
             return false;
@@ -1500,6 +1503,17 @@ private:
         if (!spec && params_base.speculative.has_synth()) {
             SRV_ERR("%s", "synthetic acceptance requires an initialized speculative decoding context\n");
             return false;
+        }
+
+        if (decision.type == COMMON_DECISION_TYPE_JEV) {
+            if (llama_pooling_type(ctx_tgt) != LLAMA_POOLING_TYPE_NONE) {
+                SRV_ERR("%s", "JEV requires pooling type none\n");
+                return false;
+            }
+            jev_nextn_unmasked = spec_mtp && spec != nullptr;
+            if (!jev_nextn_unmasked) {
+                llama_set_embeddings_nextn(ctx_tgt, true, /* masked */ true);
+            }
         }
 
         for (int i = 0; i < params_base.n_parallel; i++) {
@@ -2471,7 +2485,26 @@ private:
         res->index    = slot.task->index;
         res->n_tokens = slot.task->n_tokens();
 
-        const auto & decision = slot.task->decision;
+        const auto & decision_task = slot.task->decision;
+
+        if (decision_task.jev) {
+            const float * hidden = llama_get_embeddings_nextn_ith(slot.ctx_tgt, i_batch);
+            if (!hidden) {
+                send_error(slot, "failed to read JEV hidden state", ERROR_TYPE_SERVER);
+                return;
+            }
+            try {
+                const auto scores = decision.score_jev_noul(hidden, llama_model_n_embd_out(model_tgt));
+                res->scores.assign(scores.begin(), scores.end());
+            } catch (const std::exception & e) {
+                send_error(slot, e.what(), ERROR_TYPE_SERVER);
+                return;
+            }
+            queue_results.send(std::move(res));
+            return;
+        }
+
+        const auto & decision = decision_task;
 
         if (!decision.labels.empty()) {
             const float * logits = llama_get_logits_ith(slot.ctx_tgt, i_batch);
@@ -6492,6 +6525,45 @@ void server_routes::init_routes() {
         const json body = json::parse(req.body);
         const auto questions = decision.parse_questions(body);
 
+        int32_t id_slot = -1;
+        if (body.contains("id_slot")) {
+            if (!body.at("id_slot").is_number_integer()) {
+                res->error(format_error_response("id_slot must be an integer", ERROR_TYPE_INVALID_REQUEST));
+                return res;
+            }
+            id_slot = body.at("id_slot").get<int32_t>();
+            if (id_slot < -1 || id_slot >= params.n_parallel) {
+                res->error(format_error_response("id_slot is out of range", ERROR_TYPE_INVALID_REQUEST));
+                return res;
+            }
+        }
+        std::map<int, float> request_lora;
+        if (body.contains("lora")) {
+            if (!body.at("lora").is_array()) {
+                res->error(format_error_response("lora must be an array", ERROR_TYPE_INVALID_REQUEST));
+                return res;
+            }
+            for (const auto & entry : body.at("lora")) {
+                if (!entry.is_object() || !entry.contains("id") || !entry.at("id").is_number_integer() ||
+                    !entry.contains("scale") || !entry.at("scale").is_number()) {
+                    res->error(format_error_response("lora entries require numeric id and scale", ERROR_TYPE_INVALID_REQUEST));
+                    return res;
+                }
+                const int id = entry.at("id").get<int>();
+                const float scale = entry.at("scale").get<float>();
+                if (id < 0 || (size_t) id >= params.lora_adapters.size() || !std::isfinite(scale) || scale < 0.0f) {
+                    res->error(format_error_response("invalid lora adapter id or scale", ERROR_TYPE_INVALID_REQUEST));
+                    return res;
+                }
+                request_lora[id] = scale;
+            }
+        }
+        if (decision.type == COMMON_DECISION_TYPE_JEV &&
+            std::none_of(request_lora.begin(), request_lora.end(), [](const auto & pair) { return pair.second > 0.0f; })) {
+            res->error(format_error_response("JEV requires an enabled request lora adapter", ERROR_TYPE_INVALID_REQUEST));
+            return res;
+        }
+
         std::vector<raw_buffer> files;
         const json state = decision.prepare_state(decision.parse_state(body, files));
         if (!files.empty() && (!decision.can_use_images() || !meta->has_inp_image)) {
@@ -6506,6 +6578,8 @@ void server_routes::init_routes() {
             if (decision.is_joint()) {
                 server_task task = server_task(SERVER_TASK_TYPE_DECISION);
                 task.id = rd.get_new_id();
+                task.id_slot = id_slot;
+                task.params.lora = request_lora;
                 decision.fill_task_joint(state, questions, files, ctx_server.mctx, ctx_server.init_opt, task);
                 tasks.push_back(std::move(task));
             } else {
@@ -6513,12 +6587,14 @@ void server_routes::init_routes() {
                     for (size_t variant = 0; variant < decision.n_variants(question); variant++) {
                         server_task task = server_task(SERVER_TASK_TYPE_DECISION);
                         task.id = rd.get_new_id();
+                        task.id_slot = id_slot;
+                        task.params.lora = request_lora;
                         decision.fill_task(state, questions, question, variant, files, ctx_server.mctx, ctx_server.init_opt, task);
                         tasks.push_back(std::move(task));
                     }
                 }
             }
-            if (decision.can_share_prompt()) {
+            if (id_slot == -1 && decision.can_share_prompt()) {
                 tasks = server_decision_group_tasks(std::move(tasks), params.n_parallel);
             }
             rd.post_tasks(std::move(tasks));

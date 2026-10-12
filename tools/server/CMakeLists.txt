@@ -14,6 +14,10 @@ add_library(${TARGET} STATIC
     server-common.cpp
     server-common.h
     server-decision.cpp
+    server-jev.cpp
+    server-jev.h
+    server-slot-lora.cpp
+    server-slot-lora.h
     server-decision.h
     server-context.cpp
     server-context.h
