@@ -1,0 +1,101 @@
+{
+  "base_model_path": ".",
+  "hidden_size": 2816,
+  "slots": {
+    "num_slots": 24,
+    "ranges": {
+      "noul": [
+        0,
+        2
+      ],
+      "score": [
+        2,
+        8
+      ],
+      "choice": [
+        8,
+        24
+      ]
+    },
+    "verbalizers": [
+      "false",
+      "true",
+      "0",
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G",
+      "H",
+      "I",
+      "J",
+      "K",
+      "L",
+      "M",
+      "N",
+      "O",
+      "P"
+    ],
+    "template_version": "bare-v1"
+  },
+  "verbalizer_ids": [
+    4530,
+    3397,
+    236771,
+    236770,
+    236778,
+    236800,
+    236812,
+    236810,
+    236776,
+    236799,
+    236780,
+    236796,
+    236788,
+    236811,
+    236823,
+    236814,
+    236777,
+    236863,
+    236855,
+    236798,
+    236792,
+    236797,
+    236806,
+    236791
+  ],
+  "kinds": [
+    "noul",
+    "choice",
+    "score"
+  ],
+  "softcap": 30.0,
+  "readout": {
+    "type": "last_token",
+    "canvas_len": 1,
+    "canvas_token": 0,
+    "prefix_token": 2,
+    "no_pad_mask": true
+  },
+  "stage": "s2",
+  "lora": {
+    "r": 32,
+    "alpha": 64,
+    "dropout": 0.05,
+    "target_modules": "model\\.language_model\\.layers\\.\\d+\\.(self_attn\\.(q|k|v|o)_proj|mlp\\.(gate|up|down)_proj)"
+  },
+  "model_name": "jev-gemma4-26b-a4b-step7000",
+  "model_version": "0.1.0",
+  "adapter_subfolder": "adapter",
+  "weights_mode": "dual",
+  "base_model": "google/gemma-4-26B-A4B-it",
+  "temperatures": "jev",
+  "source_checkpoint": "/root/jev-judge/checkpoints/s2_gemma4_step7000"
+}
