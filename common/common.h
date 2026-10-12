@@ -697,6 +697,8 @@ struct common_params {
 
     bool log_json = false;
 
+    std::string jev_dir;
+
     std::string slot_save_path;
     std::string media_path; // path to directory for loading media files
 
@@ -956,6 +958,7 @@ struct common_sampler;
 // typed decision models, see "<arch>.decision.type" in the model metadata
 enum common_decision_type {
     COMMON_DECISION_TYPE_NONE,    // not a decision model
+    COMMON_DECISION_TYPE_JEV,     // JEV hidden-state classification head
     COMMON_DECISION_TYPE_OPENJEV, // logits of one label token per option, read at the last prompt token
     COMMON_DECISION_TYPE_LEV,     // same as openjev, noul is read from a rating scale
     COMMON_DECISION_TYPE_KEV,     // dot product of the hidden states of the last token and of one end token per option

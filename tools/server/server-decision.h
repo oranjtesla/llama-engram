@@ -2,6 +2,7 @@
 
 #include "server-common.h"
 #include "server-task.h"
+#include "server-jev.h"
 
 #include <map>
 #include <memory>
@@ -33,11 +34,14 @@ struct server_decision_context {
     common_decision_type type = COMMON_DECISION_TYPE_NONE;
 
     // read the "<arch>.decision.*" metadata, type stays NONE if the model has none
-    void init(const llama_model * model);
+    void init(const llama_model * model, const std::string & jev_dir = "");
+
+    std::array<float, 2> score_jev_noul(const float * hidden, size_t n_hidden) const;
 
     // true if the questions of a request start with the same tokens, and the model can continue from them
     bool can_share_prompt() const {
         switch (type) {
+            case COMMON_DECISION_TYPE_JEV:
             case COMMON_DECISION_TYPE_OPENJEV:
             case COMMON_DECISION_TYPE_LEV:
             case COMMON_DECISION_TYPE_KEV:
@@ -108,6 +112,8 @@ struct server_decision_context {
 private:
     const llama_vocab * vocab = nullptr;
     std::shared_ptr<const common_chat_template> tmpl; // the "systemone" template
+
+    std::unique_ptr<server_jev_head> jev;
 
     std::map<std::string, float> temperatures; // "<type>" or "<type>.<n_options bucket>"
     size_t n_options_max   = 0;

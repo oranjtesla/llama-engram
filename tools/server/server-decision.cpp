@@ -30,8 +30,23 @@ static std::string decision_meta_str(const llama_model * model, const std::strin
 // model-specific setup
 //
 
-void server_decision_context::init(const llama_model * model) {
+void server_decision_context::init(const llama_model * model, const std::string & jev_dir) {
     *this = server_decision_context(); // the model can be reloaded
+
+    if (!jev_dir.empty()) {
+        if (common_get_decision_type(model) != COMMON_DECISION_TYPE_NONE) {
+            throw std::runtime_error("JEV cannot be combined with model-owned decision metadata");
+        }
+        vocab = llama_model_get_vocab(model);
+        jev = std::make_unique<server_jev_head>(server_jev_head::load(jev_dir));
+        if (jev->hidden_size() != (size_t) llama_model_n_embd_out(model)) {
+            throw std::runtime_error("JEV head does not match model hidden size");
+        }
+        n_options_max = 2;
+        temperatures["noul"] = jev->temperature();
+        type = COMMON_DECISION_TYPE_JEV;
+        return;
+    }
 
     const common_decision_type model_type = common_get_decision_type(model);
     if (model_type == COMMON_DECISION_TYPE_NONE) {
@@ -144,6 +159,13 @@ void server_decision_context::init(const llama_model * model) {
 // request parsing
 //
 
+std::array<float, 2> server_decision_context::score_jev_noul(const float * hidden, size_t n_hidden) const {
+    if (!jev) {
+        throw std::runtime_error("JEV classifier is not initialized");
+    }
+    return jev->score_noul(hidden, n_hidden);
+}
+
 std::vector<server_decision_question> server_decision_context::parse_questions(const json & body) const {
     // lfm2-d1 and lfm2-d1-omni accept a null state, for example to ask about images only
     if (!body.contains("state") || (body.at("state").is_null() && type != COMMON_DECISION_TYPE_LFM2_D1 && type != COMMON_DECISION_TYPE_LFM2_D1_OMNI)) {
@@ -160,6 +182,9 @@ std::vector<server_decision_question> server_decision_context::parse_questions(c
         };
         if (!q.is_object()) {
             throw err("must be an object");
+        }
+        if (type == COMMON_DECISION_TYPE_JEV && (!q.contains("instructions") || !q.at("instructions").is_string())) {
+            throw err("JEV instructions must be a string");
         }
         if (!q.contains("instructions") || q.at("instructions").is_null()) {
             throw err("\"instructions\" must be provided");
@@ -214,6 +239,10 @@ std::vector<server_decision_question> server_decision_context::parse_questions(c
             }
         } else {
             throw err("\"type\" must be one of: choice, score, noul");
+        }
+
+        if (type == COMMON_DECISION_TYPE_JEV && question.type != SERVER_DECISION_QUESTION_NOUL) {
+            throw err("JEV currently supports only noul questions");
         }
 
         if (question.options.size() > n_options_max) {
@@ -585,6 +614,13 @@ std::string server_decision_context::render(
         size_t variant,
         size_t n_images,
         bool is_audio) const {
+    if (type == COMMON_DECISION_TYPE_JEV) {
+        if (!state.is_string() || !question.instructions.is_string()) {
+            throw std::invalid_argument("JEV state and instructions must be strings");
+        }
+        return server_jev_head::render_noul(state.get<std::string>(), question.instructions.get<std::string>());
+    }
+
     // the template is given raw JSON values, it serializes the ones that are not strings
     json inp = json{
         {"id",           question.id},
@@ -658,6 +694,18 @@ void server_decision_context::fill_task(
         mtmd_context * mctx,
         const mtmd_helper_init_opt & init_opt,
         server_task & task) const {
+    if (type == COMMON_DECISION_TYPE_JEV) {
+        const std::string prompt = render(state, questions, question, variant, 0);
+        llama_tokens tokens = common_tokenize(vocab, prompt, false, true);
+        if (tokens.empty()) {
+            throw std::invalid_argument("empty JEV decision prompt");
+        }
+        task.decision.jev = true;
+        task.decision.markers.push_back(tokens.size() - 1);
+        task.tokens = server_tokens(tokens, false);
+        return;
+    }
+
     if (type == COMMON_DECISION_TYPE_LFM2_D1_OMNI) {
         fill_task_d1omni(state, questions, question, variant, files, mctx, init_opt, task);
         return;
