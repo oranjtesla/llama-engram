@@ -157,3 +157,4 @@ AGENTS.local.md
 # @mc: beginsd here
 
 *.bundle
+/mc
