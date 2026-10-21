@@ -75,18 +75,28 @@ server_jev_head server_jev_head::load(const std::string & directory) {
     server_jev_head result;
     result.n_hidden = config.at("hidden_size").get<size_t>();
     result.n_slots = config.at("slots").at("num_slots").get<size_t>();
-    const auto range = config.at("slots").at("ranges").at("noul").get<std::vector<size_t>>();
     result.softcap = config.at("softcap").get<float>();
-    result.temp_noul = calibration.at("per_kind").at("noul").get<float>();
-
-    if (result.n_hidden != 2816 || result.n_slots != 24 || range.size() != 2 || range[1] != range[0] + 2 ||
-        range[1] > result.n_slots || config.at("slots").at("template_version") != "bare-v1" ||
+    if (result.n_hidden != 2816 || result.n_slots != 24 ||
+        config.at("slots").at("template_version") != "bare-v1" ||
         config.at("readout").at("type") != "last_token" ||
-        !std::isfinite(result.softcap) || result.softcap <= 0 ||
-        !std::isfinite(result.temp_noul) || result.temp_noul <= 0) {
+        !std::isfinite(result.softcap) || result.softcap <= 0) {
         throw std::runtime_error("unsupported JEV classifier configuration");
     }
-    result.noul_first = range[0];
+    size_t expected_first = 0;
+    for (const auto & [kind, width] : std::vector<std::pair<std::string, size_t>>{{"noul", 2}, {"score", 6}, {"choice", 16}}) {
+        const auto range = config.at("slots").at("ranges").at(kind).get<std::vector<size_t>>();
+        const float temperature = calibration.at("per_kind").at(kind).get<float>();
+        if (range.size() != 2 || range[0] != expected_first || range[1] != range[0] + width ||
+            range[1] > result.n_slots || !std::isfinite(temperature) || temperature <= 0) {
+            throw std::runtime_error("unsupported JEV output range or calibration: " + kind);
+        }
+        result.ranges[kind] = {range[0], range[1]};
+        result.temperatures[kind] = temperature;
+        expected_first = range[1];
+    }
+    if (expected_first != result.n_slots) {
+        throw std::runtime_error("JEV classifier ranges do not cover head outputs");
+    }
 
     const auto data = read_file(root / "head.safetensors", 4 * 1024 * 1024);
     if (data.size() < 8) {
@@ -105,26 +115,37 @@ server_jev_head server_jev_head::load(const std::string & directory) {
     return result;
 }
 
-std::string server_jev_head::render_noul(const std::string & state, const std::string & question) {
-    return "[kind] noul\n[state] " + state + "\n[question] " + question +
-           "\n[options]\nfalse\ntrue\n[decision]:";
+size_t server_jev_head::max_options(const std::string & kind) const {
+    const auto & range = ranges.at(kind);
+    return range.second - range.first;
 }
 
-std::array<float, 2> server_jev_head::score_noul(const float * hidden, size_t n_hidden_input) const {
+float server_jev_head::temperature(const std::string & kind) const {
+    return temperatures.at(kind);
+}
+
+std::vector<float> server_jev_head::score(
+        const std::string & kind, const float * hidden, size_t n_hidden_input, size_t n_outputs) const {
     if (hidden == nullptr || n_hidden_input != n_hidden) {
         throw std::invalid_argument("JEV hidden state has wrong dimensions");
     }
-    std::array<float, 2> scores;
-    for (size_t i = 0; i < scores.size(); i++) {
-        const size_t slot = noul_first + i;
-        float score = bias[slot];
-        for (size_t j = 0; j < n_hidden; j++) {
-            if (!std::isfinite(hidden[j])) {
-                throw std::runtime_error("JEV hidden state contains nonfinite values");
-            }
-            score += weight[slot * n_hidden + j] * hidden[j];
+    const size_t first = ranges.at(kind).first;
+    if (n_outputs < 2 || n_outputs > max_options(kind)) {
+        throw std::invalid_argument("JEV output count exceeds trained head capacity");
+    }
+    for (size_t j = 0; j < n_hidden; j++) {
+        if (!std::isfinite(hidden[j])) {
+            throw std::runtime_error("JEV hidden state contains nonfinite values");
         }
-        scores[i] = softcap * std::tanh(score / softcap);
+    }
+    std::vector<float> scores(n_outputs);
+    for (size_t i = 0; i < n_outputs; i++) {
+        const size_t slot = first + i;
+        float value = bias[slot];
+        for (size_t j = 0; j < n_hidden; j++) {
+            value += weight[slot * n_hidden + j] * hidden[j];
+        }
+        scores[i] = softcap * std::tanh(value / softcap);
     }
     return scores;
 }

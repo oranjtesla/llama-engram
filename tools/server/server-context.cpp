@@ -1226,7 +1226,7 @@ private:
         vocab = llama_model_get_vocab(model_tgt);
 
         try {
-            decision.init(model_tgt, params_base.jev_dir);
+            decision.init(model_tgt, params_base.jev_dir, params_base.decision_template);
         } catch (const std::exception & e) {
             SRV_ERR("failed to init decision model: %s\n", e.what());
             return false;
@@ -2352,8 +2352,8 @@ private:
                 return;
             }
             try {
-                const auto scores = decision.score_jev_noul(hidden, llama_model_n_embd_out(model_tgt));
-                res->scores.assign(scores.begin(), scores.end());
+                res->scores = decision.score_jev(decision_task.jev_kind, hidden,
+                                                 llama_model_n_embd_out(model_tgt), decision_task.jev_n_outputs);
             } catch (const std::exception & e) {
                 send_error(slot, e.what(), ERROR_TYPE_SERVER);
                 return;
@@ -5841,26 +5841,41 @@ void server_routes::init_routes() {
             return res;
         }
 
-        // one task per variant of each question, or one task for all the questions
+        // Wide JEV choices are evaluated in balanced native-width groups. A
+        // second pass compares their winners through the same server scheduler.
+        std::vector<std::vector<server_decision_question>> wide_groups(questions.size());
+        for (size_t i = 0; i < questions.size(); i++) {
+            if (decision.is_jev() && questions[i].type == SERVER_DECISION_QUESTION_CHOICE &&
+                questions[i].options.size() > 16) {
+                wide_groups[i] = decision.jev_choice_groups(questions[i]);
+            }
+        }
+
         auto & rd = res->rd;
         {
             std::vector<server_task> tasks;
             if (decision.is_joint()) {
-                server_task task = server_task(SERVER_TASK_TYPE_DECISION);
+                server_task task(SERVER_TASK_TYPE_DECISION);
                 task.id = rd.get_new_id();
                 task.id_slot = id_slot;
                 task.params.lora = request_lora;
                 decision.fill_task_joint(state, questions, files, ctx_server.mctx, ctx_server.init_opt, task);
                 tasks.push_back(std::move(task));
             } else {
-                for (const auto & question : questions) {
-                    for (size_t variant = 0; variant < decision.n_variants(question); variant++) {
-                        server_task task = server_task(SERVER_TASK_TYPE_DECISION);
-                        task.id = rd.get_new_id();
-                        task.id_slot = id_slot;
-                        task.params.lora = request_lora;
-                        decision.fill_task(state, questions, question, variant, files, ctx_server.mctx, ctx_server.init_opt, task);
-                        tasks.push_back(std::move(task));
+                for (size_t i = 0; i < questions.size(); i++) {
+                    const auto & question = questions[i];
+                    const auto & groups = wide_groups[i];
+                    const size_t n_parts = groups.empty() ? 1 : groups.size();
+                    for (size_t part = 0; part < n_parts; part++) {
+                        const auto & q = groups.empty() ? question : groups[part];
+                        for (size_t variant = 0; variant < decision.n_variants(q); variant++) {
+                            server_task task(SERVER_TASK_TYPE_DECISION);
+                            task.id = rd.get_new_id();
+                            task.id_slot = id_slot;
+                            task.params.lora = request_lora;
+                            decision.fill_task(state, questions, q, variant, files, ctx_server.mctx, ctx_server.init_opt, task);
+                            tasks.push_back(std::move(task));
+                        }
                     }
                 }
             }
@@ -5871,9 +5886,8 @@ void server_routes::init_routes() {
         }
 
         auto all_results = rd.wait_for_all(req.should_stop);
-
         if (all_results.is_terminated) {
-            return res; // connection is closed
+            return res;
         } else if (all_results.error) {
             res->error(all_results.error->to_json());
             return res;
@@ -5882,24 +5896,81 @@ void server_routes::init_routes() {
         json answers = json::object();
         int32_t n_tokens = 0;
         size_t i_result = 0;
-        size_t i_score  = 0;
-        for (const auto & question : questions) {
+        size_t i_score = 0;
+        std::vector<std::vector<std::vector<float>>> wide_scores(questions.size());
+        std::vector<size_t> wide_indices;
+        std::vector<server_task> final_tasks;
+        for (size_t i = 0; i < questions.size(); i++) {
+            const auto & question = questions[i];
             std::vector<std::vector<float>> scores;
             if (decision.is_joint()) {
-                // one result with the scores of all the questions, in order
                 auto * result = dynamic_cast<server_task_result_decision *>(all_results.results[0].get());
                 GGML_ASSERT(result != nullptr && i_score + question.options.size() <= result->scores.size());
                 scores.emplace_back(result->scores.begin() + i_score, result->scores.begin() + i_score + question.options.size());
                 i_score += question.options.size();
                 n_tokens = result->n_tokens;
+            } else {
+                const auto & groups = wide_groups[i];
+                const size_t n_parts = groups.empty() ? 1 : groups.size();
+                for (size_t part = 0; part < n_parts; part++) {
+                    const auto & q = groups.empty() ? question : groups[part];
+                    for (size_t variant = 0; variant < decision.n_variants(q); variant++) {
+                        auto * result = dynamic_cast<server_task_result_decision *>(all_results.results[i_result++].get());
+                        GGML_ASSERT(result != nullptr);
+                        scores.push_back(result->scores);
+                        n_tokens += result->n_tokens;
+                    }
+                }
             }
-            for (size_t variant = 0; !decision.is_joint() && variant < decision.n_variants(question); variant++) {
-                auto * result = dynamic_cast<server_task_result_decision *>(all_results.results[i_result++].get());
+            if (wide_groups[i].empty()) {
+                answers[question.id] = decision.format_answer(question, scores, !files.empty());
+                continue;
+            }
+            wide_scores[i] = std::move(scores);
+            server_decision_question finalists = question;
+            finalists.options.clear();
+            for (size_t group = 0; group < wide_groups[i].size(); group++) {
+                const auto & local = wide_scores[i][group];
+                if (local.size() != wide_groups[i][group].options.size() ||
+                    std::any_of(local.begin(), local.end(), [](float score) { return !std::isfinite(score); })) {
+                    res->error(format_error_response("JEV choice group returned invalid scores", ERROR_TYPE_SERVER));
+                    return res;
+                }
+                const size_t best = std::max_element(local.begin(), local.end()) - local.begin();
+                finalists.options.push_back(wide_groups[i][group].options[best]);
+            }
+            server_task task(SERVER_TASK_TYPE_DECISION);
+            task.id = rd.get_new_id();
+            task.id_slot = id_slot;
+            task.params.lora = request_lora;
+            decision.fill_task(state, questions, finalists, 0, files, ctx_server.mctx, ctx_server.init_opt, task);
+            final_tasks.push_back(std::move(task));
+            wide_indices.push_back(i);
+        }
+
+        if (!final_tasks.empty()) {
+            // The response reader only accepts one task batch; subsequent passes
+            // use a second reader while preserving the same underlying queues.
+            server_response_reader final_reader(rd.queue_tasks, rd.queue_results, rd.polling_interval_seconds);
+            if (id_slot == -1 && decision.can_share_prompt()) {
+                final_tasks = server_decision_group_tasks(std::move(final_tasks), params.n_parallel);
+            }
+            final_reader.post_tasks(std::move(final_tasks));
+            auto last_results = final_reader.wait_for_all(req.should_stop);
+            if (last_results.is_terminated) {
+                return res;
+            } else if (last_results.error) {
+                res->error(last_results.error->to_json());
+                return res;
+            }
+            for (size_t i = 0; i < wide_indices.size(); i++) {
+                auto * result = dynamic_cast<server_task_result_decision *>(last_results.results[i].get());
                 GGML_ASSERT(result != nullptr);
-                scores.push_back(result->scores);
+                const size_t index = wide_indices[i];
+                answers[questions[index].id] = decision.format_jev_wide_choice(
+                    questions[index], wide_groups[index], wide_scores[index], result->scores);
                 n_tokens += result->n_tokens;
             }
-            answers[question.id] = decision.format_answer(question, scores, !files.empty());
         }
 
         res->ok(json{
