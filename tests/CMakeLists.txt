@@ -364,6 +364,8 @@ if (TARGET gguf-model-data)
 endif()
 
 # Run with a materialized JEV head and dev/jev/reference/e1.json.
+llama_build(test-jev-template.cpp)
+target_include_directories(test-jev-template PRIVATE ${PROJECT_SOURCE_DIR}/tools/server ${PROJECT_BINARY_DIR}/tools/server)
 llama_build(test-jev-head.cpp ${PROJECT_SOURCE_DIR}/tools/server/server-jev.cpp)
 target_include_directories(test-jev-head PRIVATE ${PROJECT_SOURCE_DIR}/tools/server)
 llama_build_and_test(test-slot-lora.cpp ${PROJECT_SOURCE_DIR}/tools/server/server-slot-lora.cpp)
