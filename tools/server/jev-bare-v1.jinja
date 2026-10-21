@@ -1,0 +1,30 @@
+{%- macro value(v) -%}
+{{- v if v is string else v | tojson(separators=[',', ':']) -}}
+{%- endmacro -%}
+{{- '[kind] ' ~ type ~ '\n[state] ' -}}{{- value(state) -}}
+{{- '\n[question] ' -}}{{- value(instructions) -}}
+{%- set annotated = namespace(any=false) -%}
+{%- for option in options -%}
+    {%- if option.description is not none -%}{%- set annotated.any = true -%}{%- endif -%}
+{%- endfor -%}
+{%- if annotated.any and type != 'choice' -%}
+    {{- '\n[criteria]' -}}
+    {%- for option in options -%}
+        {%- if option.description is not none -%}
+            {{- '\n' ~ option.key ~ ': ' -}}{{- value(option.description) -}}
+        {%- endif -%}
+    {%- endfor -%}
+{%- endif -%}
+{{- '\n[options]\n' -}}
+{%- for option in options -%}
+    {{- '\n' if not loop.first else '' -}}
+    {%- if type == 'choice' -%}
+        {{- 'ABCDEFGHIJKLMNOP'[loop.index0] ~ ') ' ~ option.key -}}
+        {%- if option.description is not none -%}
+            {{- ': ' -}}{{- value(option.description) -}}
+        {%- endif -%}
+    {%- else -%}
+        {{- option.key -}}
+    {%- endif -%}
+{%- endfor -%}
+{{- '\n[decision]:' -}}
