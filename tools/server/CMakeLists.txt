@@ -1,4 +1,6 @@
 include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/jev-bare-v1.jinja" JEV_TEMPLATE_SOURCE)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/jev-bare-v1.h.in" "${CMAKE_CURRENT_BINARY_DIR}/jev-bare-v1.h" @ONLY)
 
 # server-context containing the core server logic, used by llama-server and CLI
 

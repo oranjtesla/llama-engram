@@ -3501,6 +3501,13 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_examples({LLAMA_EXAMPLE_SERVER}));
     add_opt(common_arg(
+        {"--decision-template-file"}, "JINJA_TEMPLATE_FILE",
+        "set a custom Jinja decision template for /v1/systemone",
+        [](common_params & params, const std::string & value) {
+            params.decision_template = read_file(value);
+        }
+    ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_DECISION_TEMPLATE_FILE"));
+    add_opt(common_arg(
         {"--embedding", "--embeddings"},
         string_format("restrict to only support embedding use case; use only with dedicated embedding models (default: %s)", params.embedding ? "enabled" : "disabled"),
         [](common_params & params) {

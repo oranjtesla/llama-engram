@@ -1,0 +1,3 @@
+#pragma once
+
+static constexpr const char * JEV_BARE_V1_TEMPLATE = R"jev(@JEV_TEMPLATE_SOURCE@)jev";
