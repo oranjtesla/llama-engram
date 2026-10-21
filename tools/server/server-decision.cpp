@@ -1,4 +1,5 @@
 #include "server-decision.h"
+#include "jev-bare-v1.h"
 
 #include "../../src/llama-ext.h" // staging API: llama_decision_order
 
@@ -36,7 +37,7 @@ static std::string decision_meta_str(const llama_model * model, const std::strin
 // model-specific setup
 //
 
-void server_decision_context::init(const llama_model * model, const std::string & jev_dir) {
+void server_decision_context::init(const llama_model * model, const std::string & jev_dir, const std::string & template_override) {
     *this = server_decision_context(); // the model can be reloaded
 
     if (!jev_dir.empty()) {
@@ -48,8 +49,12 @@ void server_decision_context::init(const llama_model * model, const std::string 
         if (jev->hidden_size() != (size_t) llama_model_n_embd_out(model)) {
             throw std::runtime_error("JEV head does not match model hidden size");
         }
-        n_options_max = 2;
-        temperatures["noul"] = jev->temperature();
+        n_options_max = 255;
+        for (const char * kind : {"noul", "choice", "score"}) {
+            temperatures[kind] = jev->temperature(kind);
+        }
+        tmpl = std::make_shared<const common_chat_template>(
+            template_override.empty() ? JEV_BARE_V1_TEMPLATE : template_override, "", "");
         type = COMMON_DECISION_TYPE_JEV;
         return;
     }
@@ -65,10 +70,11 @@ void server_decision_context::init(const llama_model * model, const std::string 
     vocab = llama_model_get_vocab(model);
 
     const char * tmpl_src = llama_model_chat_template(model, "systemone");
-    if (tmpl_src == nullptr) {
+    if (tmpl_src == nullptr && template_override.empty()) {
         throw std::runtime_error("decision model has no \"systemone\" template");
     }
-    tmpl = std::make_shared<const common_chat_template>(tmpl_src, "", "");
+    tmpl = std::make_shared<const common_chat_template>(
+        template_override.empty() ? tmpl_src : template_override, "", "");
 
     const std::string prefix_temp = prefix + "temperature.";
     for (int32_t i = 0; i < llama_model_meta_count(model); i++) {
@@ -233,11 +239,28 @@ void server_decision_context::init(const llama_model * model, const std::string 
 
 static bool decision_is_payload(const json & val) {
     return val.is_string() || val.is_object() || val.is_array();
-std::array<float, 2> server_decision_context::score_jev_noul(const float * hidden, size_t n_hidden) const {
+}
+
+std::vector<float> server_decision_context::score_jev(
+        const std::string & kind, const float * hidden, size_t n_hidden, size_t n_outputs) const {
     if (!jev) {
         throw std::runtime_error("JEV classifier is not initialized");
     }
-    return jev->score_noul(hidden, n_hidden);
+    return jev->score(kind, hidden, n_hidden, n_outputs);
+}
+
+float server_decision_context::jev_temperature(const std::string & kind) const {
+    if (!jev) {
+        throw std::runtime_error("JEV classifier is not initialized");
+    }
+    return jev->temperature(kind);
+}
+
+std::string server_decision_context::jev_kind(const server_decision_question & question) const {
+    if (question.type == SERVER_DECISION_QUESTION_SCORE && question.options.size() != 6) {
+        return "choice";
+    }
+    return decision_question_type_name(question.type);
 }
 
 std::vector<server_decision_question> server_decision_context::parse_questions(const json & body) const {
@@ -264,7 +287,7 @@ std::vector<server_decision_question> server_decision_context::parse_questions(c
         // h2o-lightning: the instructions can be left out, the template has a default, and the type defaults to choice
         const bool is_h2o = type == COMMON_DECISION_TYPE_H2O_LIGHTNING;
         const json instructions = q.contains("instructions") ? q.at("instructions") : (is_h2o ? json(std::string()) : json());
-        if (instructions.is_null() && type != COMMON_DECISION_TYPE_VLLM_D3 && !is_h2o) {
+        if (instructions.is_null() && type != COMMON_DECISION_TYPE_VLLM_D3 && !is_h2o && type != COMMON_DECISION_TYPE_JEV) {
             throw err("\"instructions\" must be provided");
         }
         if (strict_payload && (!decision_is_payload(instructions) || instructions == "")) {
@@ -317,7 +340,7 @@ std::vector<server_decision_question> server_decision_context::parse_questions(c
             if (!criteria.is_null() && !criteria.is_object()) {
                 throw err("\"criteria\" must be an object");
             }
-            if (strict_payload && criteria.is_object()) {
+            if ((strict_payload || type == COMMON_DECISION_TYPE_JEV) && criteria.is_object()) {
                 for (const auto & [key, description] : criteria.items()) {
                     if ((key != "false" && key != "true") || !decision_is_payload(description)) {
                         throw err("\"criteria\" may only describe \"false\" and \"true\" with text, an object or an array");
@@ -342,8 +365,9 @@ std::vector<server_decision_question> server_decision_context::parse_questions(c
             throw err("\"type\" must be one of: choice, score, noul");
         }
 
-        if (type == COMMON_DECISION_TYPE_JEV && question.type != SERVER_DECISION_QUESTION_NOUL) {
-            throw err("JEV currently supports only noul questions");
+        if (type == COMMON_DECISION_TYPE_JEV && question.type == SERVER_DECISION_QUESTION_CHOICE &&
+            question.options.size() < 2) {
+            throw err("JEV choice requires at least two options");
         }
 
         if (question.options.size() > n_options_max) {
@@ -353,6 +377,85 @@ std::vector<server_decision_question> server_decision_context::parse_questions(c
         questions.push_back(std::move(question));
     }
     return questions;
+}
+
+// A physical JEV Choice readout has at most 16 outputs. Keep contiguous groups
+// balanced so that no pass has a single option (including 17-option requests).
+std::vector<server_decision_question> server_decision_context::jev_choice_groups(
+        const server_decision_question & question) const {
+    if (type != COMMON_DECISION_TYPE_JEV || question.type != SERVER_DECISION_QUESTION_CHOICE ||
+        question.options.size() <= 16 || question.options.size() > 255) {
+        throw std::invalid_argument("expected JEV Choice with 17 to 255 options");
+    }
+    const size_t n_groups = (question.options.size() + 15) / 16;
+    std::vector<server_decision_question> groups;
+    groups.reserve(n_groups);
+    size_t offset = 0;
+    for (size_t i = 0; i < n_groups; i++) {
+        const size_t count = (question.options.size() - offset + n_groups - i - 1) / (n_groups - i);
+        server_decision_question part = question;
+        part.options.assign(question.options.begin() + offset, question.options.begin() + offset + count);
+        groups.push_back(std::move(part));
+        offset += count;
+    }
+    return groups;
+}
+
+json server_decision_context::format_jev_wide_choice(
+        const server_decision_question & question,
+        const std::vector<server_decision_question> & groups,
+        const std::vector<std::vector<float>> & group_scores,
+        const std::vector<float> & final_scores) const {
+    if (type != COMMON_DECISION_TYPE_JEV || groups.size() != group_scores.size() ||
+        groups.size() != final_scores.size() || groups.size() < 2 || groups.size() > 16) {
+        throw std::invalid_argument("invalid JEV Choice inference groups");
+    }
+    const double temperature = jev_temperature("choice");
+    auto probabilities = [temperature](const std::vector<float> & scores) {
+        if (scores.empty() || std::any_of(scores.begin(), scores.end(), [](float v) { return !std::isfinite(v); })) {
+            throw std::runtime_error("invalid JEV choice scores");
+        }
+        const float maximum = *std::max_element(scores.begin(), scores.end());
+        std::vector<double> p;
+        double sum = 0;
+        for (float score : scores) {
+            p.push_back(std::exp((score - maximum) / temperature));
+            sum += p.back();
+        }
+        for (double & value : p) { value /= sum; }
+        return p;
+    };
+    const auto winners = probabilities(final_scores);
+    std::vector<double> combined(question.options.size());
+    size_t offset = 0;
+    for (size_t i = 0; i < groups.size(); i++) {
+        const auto & group = groups[i];
+        const auto local = probabilities(group_scores[i]);
+        if (group.options.size() != local.size() || local.size() < 2 || local.size() > 16) {
+            throw std::runtime_error("invalid JEV choice group outputs");
+        }
+        const auto winner = std::max_element(local.begin(), local.end()) - local.begin();
+        for (size_t j = 0; j < local.size(); j++) {
+            if (offset + j >= question.options.size() || group.options[j].key != question.options[offset + j].key) {
+                throw std::runtime_error("JEV choice group identity mismatch");
+            }
+            combined[offset + j] = winners[i] * local[j] / local[winner];
+        }
+        offset += local.size();
+    }
+    if (offset != combined.size()) {
+        throw std::runtime_error("incomplete JEV choice group coverage");
+    }
+    // Preserve every original option: the final comparison sets relative
+    // representative weights, and each group's local odds distribute them.
+    double sum = 0;
+    for (double p : combined) { sum += p; }
+    std::vector<float> synthetic_logits;
+    synthetic_logits.reserve(combined.size());
+    for (double p : combined) {
+        synthetic_logits.push_back((float) (temperature * std::log(p / sum)));
+    }
+    return format_answer(question, {synthetic_logits});
 }
 
 //
@@ -1030,18 +1133,11 @@ std::string server_decision_context::render(
         size_t variant,
         size_t n_images,
         bool is_audio) const {
-    if (type == COMMON_DECISION_TYPE_JEV) {
-        if (!state.is_string() || !question.instructions.is_string()) {
-            throw std::invalid_argument("JEV state and instructions must be strings");
-        }
-        return server_jev_head::render_noul(state.get<std::string>(), question.instructions.get<std::string>());
-    }
-
     // the template is given raw JSON values, it serializes the ones that are not strings
     // h2o-lightning: the template is given texts
     json inp = type == COMMON_DECISION_TYPE_H2O_LIGHTNING ? render_h2o(state, question) : json{
         {"id",           question.id},
-        {"type",         decision_question_type_name(question.type)},
+        {"type",         type == COMMON_DECISION_TYPE_JEV ? jev_kind(question) : decision_question_type_name(question.type)},
         {"instructions", question.instructions},
         {"state",        state},
         {"options",      render_options(question, variant)},
@@ -1123,6 +1219,8 @@ void server_decision_context::fill_task(
             throw std::invalid_argument("empty JEV decision prompt");
         }
         task.decision.jev = true;
+        task.decision.jev_kind = jev_kind(question);
+        task.decision.jev_n_outputs = question.options.size();
         task.decision.markers.push_back(tokens.size() - 1);
         task.tokens = server_tokens(tokens, false);
         return;
@@ -1562,7 +1660,8 @@ json server_decision_context::format_answer(const server_decision_question & que
 
     // softmax over the outputs of each variant, then the average of the variants
     // lfm2-d1-omni: image and audio answers are not calibrated
-    float temperature = has_media && type == COMMON_DECISION_TYPE_LFM2_D1_OMNI ? 1.0f : get_temperature(question);
+    float temperature = has_media && type == COMMON_DECISION_TYPE_LFM2_D1_OMNI ? 1.0f :
+        type == COMMON_DECISION_TYPE_JEV ? jev_temperature(jev_kind(question)) : get_temperature(question);
     // a model can have its own temperature for requests with media
     const auto it_image = temperatures.find("image");
     if (has_media && it_image != temperatures.end()) {

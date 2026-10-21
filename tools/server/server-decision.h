@@ -34,9 +34,12 @@ struct server_decision_context {
     common_decision_type type = COMMON_DECISION_TYPE_NONE;
 
     // read the "<arch>.decision.*" metadata, type stays NONE if the model has none
-    void init(const llama_model * model, const std::string & jev_dir = "");
+    void init(const llama_model * model, const std::string & jev_dir = "", const std::string & template_override = "");
 
-    std::array<float, 2> score_jev_noul(const float * hidden, size_t n_hidden) const;
+    std::vector<float> score_jev(const std::string & kind, const float * hidden, size_t n_hidden, size_t n_outputs) const;
+    float jev_temperature(const std::string & kind) const;
+
+    bool is_jev() const { return type == COMMON_DECISION_TYPE_JEV; }
 
     // true if the questions of a request start with the same tokens, and the model can continue from them
     bool can_share_prompt() const {
@@ -91,6 +94,15 @@ struct server_decision_context {
 
     // number of prompts that are evaluated to answer this question, each one shows the options in a different order
     size_t n_variants(const server_decision_question & question) const;
+
+    // A variable-sized Score is evaluated using the Choice head.
+    std::string jev_kind(const server_decision_question & question) const;
+
+    std::vector<server_decision_question> jev_choice_groups(const server_decision_question & question) const;
+    json format_jev_wide_choice(const server_decision_question & question,
+                                const std::vector<server_decision_question> & groups,
+                                const std::vector<std::vector<float>> & group_scores,
+                                const std::vector<float> & final_scores) const;
 
     // set the prompt of one variant of this question, and where to read its result
     // mctx is only used if there are files

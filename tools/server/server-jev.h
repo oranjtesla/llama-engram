@@ -1,27 +1,27 @@
 #pragma once
 
-#include <array>
 #include <cstddef>
+#include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 class server_jev_head {
 public:
     static server_jev_head load(const std::string & directory);
 
-    static std::string render_noul(const std::string & state, const std::string & question);
-
-    std::array<float, 2> score_noul(const float * hidden, size_t n_hidden) const;
-
+    std::vector<float> score(const std::string & kind, const float * hidden,
+                             size_t n_hidden, size_t n_outputs) const;
+    size_t max_options(const std::string & kind) const;
     size_t hidden_size() const { return n_hidden; }
-    float temperature() const { return temp_noul; }
+    float temperature(const std::string & kind) const;
 
 private:
     size_t n_hidden = 0;
     size_t n_slots = 0;
-    size_t noul_first = 0;
     float softcap = 0.0f;
-    float temp_noul = 1.0f;
+    std::map<std::string, std::pair<size_t, size_t>> ranges;
+    std::map<std::string, float> temperatures;
     std::vector<float> weight;
     std::vector<float> bias;
 };
