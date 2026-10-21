@@ -246,7 +246,7 @@ std::vector<server_decision_question> server_decision_context::parse_questions(c
             }
             if (type == COMMON_DECISION_TYPE_JEV && criteria.is_object()) {
                 for (const auto & item : criteria.items()) {
-                    if (item.first != "false" && item.first != "true") {
+                    if (item.key() != "false" && item.key() != "true") {
                         throw err("JEV noul criteria only accepts false and true descriptions");
                     }
                 }
