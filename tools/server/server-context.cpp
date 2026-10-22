@@ -2751,10 +2751,10 @@ private:
 
         cur.id_task = id_task;
 
-        // [TAG_CHECKPOINTS_FIX_POS_MIN]
-        // TODO: here we incorrectly deterimne that the saved checkpoint data covers the [pos_min, pos_max] range
-        //       this is not true for SWA models: https://github.com/ggml-org/llama.cpp/pull/24411#issuecomment-4677983225
-        cur.update_pos(slot.prompt.n_tokens() - n_tokens_cur, pos_min, pos_max);
+        // Partial SWA checkpoints save only the trailing attention window, not the full memory range.
+        // Do not claim that the checkpoint can restore an earlier position than this window covers.
+        const llama_pos pos_min_saved = n_swa > 0 ? std::max(pos_min, pos_max - n_swa) : pos_min;
+        cur.update_pos(slot.prompt.n_tokens() - n_tokens_cur, pos_min_saved, pos_max);
 
         cur.update_tgt(ctx_tgt, slot.id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
         cur.update_dft(ctx_dft, slot.id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
