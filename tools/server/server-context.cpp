@@ -4437,6 +4437,13 @@ private:
                         }
                         slot.prompt.tokens.push_back(cur_tok);
 
+                        // Keep checkpoint states inside long prompt prefixes, including those with few message boundaries.
+                        // A checkpoint after a changed prefix cannot be restored, even when most tokens still match.
+                        if (do_checkpoint && params_base.checkpoint_min_step > 0 &&
+                            slot.prompt.n_tokens() % params_base.checkpoint_min_step == 0) {
+                            break;
+                        }
+
                         // break at the last user message, or at user messages at least min step past the last checkpoint
                         if (do_checkpoint && spans.is_user_start(slot.prompt.n_tokens())) {
                             const auto pos = slot.prompt.n_tokens();
@@ -4478,6 +4485,8 @@ private:
 
                     const bool is_user_start = spans.is_user_start(n_tokens_start);
                     const bool is_last_user_message = n_tokens_start == last_user_pos;
+                    const bool is_periodic_checkpoint = params_base.checkpoint_min_step > 0 && n_tokens_start > 0 &&
+                        n_tokens_start % params_base.checkpoint_min_step == 0;
 
                     // entire prompt has been processed
                     if (slot.prompt.n_tokens() == slot.task->n_tokens()) {
@@ -4493,9 +4502,9 @@ private:
 
                         slot.init_sampler();
                     } else {
-                        // skip ordinary mid-prompt checkpoints, unless the batch starts a user
-                        // message or we are near the end of the prompt
-                        if (!is_user_start && !near_prompt_end) {
+                        // Skip ordinary mid-prompt checkpoints unless they cover a scheduled prefix,
+                        // a user message boundary, or the end of the prompt.
+                        if (!is_periodic_checkpoint && !is_user_start && !near_prompt_end) {
                             do_checkpoint = false;
                         }
                     }
@@ -4516,7 +4525,8 @@ private:
                     do_checkpoint = do_checkpoint && (
                             slot.prompt.checkpoints.empty() ||
                             is_last_user_message || near_prompt_end ||
-                            n_tokens_start > slot.prompt.checkpoints.back().n_tokens + params_base.checkpoint_min_step);
+                            n_tokens_start > slot.prompt.checkpoints.back().n_tokens + params_base.checkpoint_min_step ||
+                            (is_periodic_checkpoint && n_tokens_start >= slot.prompt.checkpoints.back().n_tokens + params_base.checkpoint_min_step));
                     SLT_DBG(slot, "main/do_checkpoint = %s, pos_min = %d, pos_max = %d\n", do_checkpoint ? "yes" : "no", pos_min, pos_max);
 
                     // note: we create the checkpoint before calling llama_decode(), so the current batch is not
