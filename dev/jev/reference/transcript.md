@@ -2,13 +2,13 @@
 [8:10am. Kuramae Technical High School. Homeroom has just begun, with the daily administrative milieu of an ordinary school day being exposited in every classroom.]
 
 [Katsuragi-sensei, the young, female homeroom teacher of class 1-3, beckons for her class to quiet down, and announces that a transfer student is joining their class. Murmurs abound - everyone seems to have some sort of idea on who it is.]
-        
-[Outside the classroom, he hesitates.]      
-        
-*this is so lame the school didnt even send me my uniform on time...*      
-        
-*oki just gotta get it over w!!*      
-        
+
+[Outside the classroom, he hesitates.]
+
+*this is so lame the school didnt even send me my uniform on time...*
+
+*oki just gotta get it over w!!*
+
 -hand reaches for the sliding door-
 
 
@@ -43,29 +43,29 @@ Katsuragi-sensei: Quiet down, everyone. He'll be here in a second.
 
 
 #### RIKU KIYOMI
-[He enters. The wrong uniform makes him look singularly out of place but his demeanor doesn’t show any sign of caring. Some of the girls quietly but audibly express their approval, most of the boys disappointed, having hoped a cute girl to have transferred instead.]        
-  
-Katsuragi-sensei: Why don’t you write your name on the board first.        
-  
-*ugh as if today couldn’t get any worse*    
-  
-[Almost imperceptibly, he hesitates and makes a face, before picking up a whiteboard marker to write in large confident strokes - 陸 冽海 (surname, given name)]        
-  
-Katsuragi-sensei: *riku - how do you read that kiyo- retsu? retsukai?*        
-  
-[The same mental puzzle plays out in the mind of every person in the classroom. Definitely not a native name. Read literally - land, and the frigid sea. Something elemental, beautiful, forbidding with something terrestrial, stable, grounding.]        
-          
-Katsuragi-sensei: *if Chinese people had anime, this would be the protagonist’s name*          
-Katsuragi-sensei: Now go on, introduce yourself.        
-  
-[His introduction is obligatory, short, and minimal. Katsuragi-sensei seems to roll her eyes without rolling them.]        
-  
-Riku Kiyomi.        
-  
-[An almost comically normal reading for a comically literary name. A mask, perhaps, a learned mask, possibly.]  
-    
-Katsuragi-sensei: -looking at a paper- well, since you’re joining us late Riku-kun, there are only seats in the back. Why don’t you pick one so we can get back on track.        
-          
+[He enters. The wrong uniform makes him look singularly out of place but his demeanor doesn’t show any sign of caring. Some of the girls quietly but audibly express their approval, most of the boys disappointed, having hoped a cute girl to have transferred instead.]
+
+Katsuragi-sensei: Why don’t you write your name on the board first.
+
+*ugh as if today couldn’t get any worse*
+
+[Almost imperceptibly, he hesitates and makes a face, before picking up a whiteboard marker to write in large confident strokes - 陸 冽海 (surname, given name)]
+
+Katsuragi-sensei: *riku - how do you read that kiyo- retsu? retsukai?*
+
+[The same mental puzzle plays out in the mind of every person in the classroom. Definitely not a native name. Read literally - land, and the frigid sea. Something elemental, beautiful, forbidding with something terrestrial, stable, grounding.]
+
+Katsuragi-sensei: *if Chinese people had anime, this would be the protagonist’s name*
+Katsuragi-sensei: Now go on, introduce yourself.
+
+[His introduction is obligatory, short, and minimal. Katsuragi-sensei seems to roll her eyes without rolling them.]
+
+Riku Kiyomi.
+
+[An almost comically normal reading for a comically literary name. A mask, perhaps, a learned mask, possibly.]
+
+Katsuragi-sensei: -looking at a paper- well, since you’re joining us late Riku-kun, there are only seats in the back. Why don’t you pick one so we can get back on track.
+
 [He walks to the back and seems to pick one at random. He sits in the second row from the left, last row. To his left sitting by the window is Asa. In front of him are a gaggle of excited girls, and to his right a few slacker looking guys seem to be sizing him up.]
 
 
@@ -130,27 +130,27 @@ Katsuragi-sensei: -looking at a paper- well, since you’re joining us late Riku
 
 
 #### RIKU KIYOMI
-Katsuragi-sensei: Okay settle down, settle down. Quiet!      
-[Katsuragi Konatsu (surname, given name; 葛城 小夏) was young for a teacher and looked even younger for her age, a number which no one seemed to know. Her appearance and height meant she always seemed to be having trouble maintaining authority over her students, and were it not for her voice she might have never been able to.]    
-      
-Katsuragi-sensei: As you all know, rolling out the changes to the national curriculum passed last year has been anything but smooth. But it seems finally, today you will be able to be taking the Math placement exams. I hope you’ve all been taking advantage of the extra week and a half you’ve had to prepare.    
-[groans around the classroom as papers are handed out.]    
-*crap did i not bring my pencil case?*    
-      
--I search once, then twice around bag.-    
-[The girl in front of him impatiently taps at his desk, beckoning him to take the handout.]    
-      
-OK I got it alright?    
--i snatch the paper and go back to searching. my hand finds something else - a box of cigarettes?-    
-      
-*wtf is this doing here???*    
-      
-[In fact this very situation had happened to him before. The only person he knew who smoked was his mother, and when she came home drunk (which she frequently did), she often would misplace things -  in Kiyomi’s room, closet, clothing, and now his bag.]    
-*that woman is gonna get me expelled on my first day*    
-      
--I quickly close my bag and look around to for pencil options.-    
-*teacher looks kinda mean. girl in front looks annoying af. the guys don’t look like the type to carry extra stationery*    
--i look left trying for an apologetic smile-  
+Katsuragi-sensei: Okay settle down, settle down. Quiet!
+[Katsuragi Konatsu (surname, given name; 葛城 小夏) was young for a teacher and looked even younger for her age, a number which no one seemed to know. Her appearance and height meant she always seemed to be having trouble maintaining authority over her students, and were it not for her voice she might have never been able to.]
+
+Katsuragi-sensei: As you all know, rolling out the changes to the national curriculum passed last year has been anything but smooth. But it seems finally, today you will be able to be taking the Math placement exams. I hope you’ve all been taking advantage of the extra week and a half you’ve had to prepare.
+[groans around the classroom as papers are handed out.]
+*crap did i not bring my pencil case?*
+
+-I search once, then twice around bag.-
+[The girl in front of him impatiently taps at his desk, beckoning him to take the handout.]
+
+OK I got it alright?
+-i snatch the paper and go back to searching. my hand finds something else - a box of cigarettes?-
+
+*wtf is this doing here???*
+
+[In fact this very situation had happened to him before. The only person he knew who smoked was his mother, and when she came home drunk (which she frequently did), she often would misplace things -  in Kiyomi’s room, closet, clothing, and now his bag.]
+*that woman is gonna get me expelled on my first day*
+
+-I quickly close my bag and look around to for pencil options.-
+*teacher looks kinda mean. girl in front looks annoying af. the guys don’t look like the type to carry extra stationery*
+-i look left trying for an apologetic smile-
 あの...
 
 
@@ -198,7 +198,7 @@ Katsuragi: hold on a minute...
 [She sees his half open bag, and picks it up. A hand reaches inside and fishes out the box of cigarette, dangling it painfully obvious in front of him.]
 Katsuragi: What's this?
 -miffed, ears slightly red, but unwilling to break my gaze w the teacher-
-タバコですけど (Cigarettes, what of it?)  
+タバコですけど (Cigarettes, what of it?)
 Katsuragi: -now fuming, tone acrid- __What of it?__
 Katsuragi: You. Me. After school. Staff's room.
 [She walks back towards her lectern in the front. The entire classroom is abuzz again. \"delinquent\", 「ヤンキーっぽい」, and other loud whispers can be heard.]
@@ -238,3 +238,4 @@ Katsuragi: *ah they're the nice expensive ones too. i know i quit a year ago but
 [The classroom door slides open and shut again as a student rushes out, perhaps to escape the tension or spread the rumors faster. The sudden rush of air makes Asa flinch.]
 
 *this is going to be a disaster. i'm going to fail this term just by existing in his orbit.*
+
