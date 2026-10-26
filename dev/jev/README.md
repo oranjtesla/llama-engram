@@ -82,7 +82,10 @@ requests use the normal server task scheduler and shared-prefix grouping.
 
 Ordinary RP requests omit `lora` and use the scale-zero server default.
 A slot's cached KV is invalidated when its adapter configuration changes. RAM
-prompt-cache entries are also matched by adapter configuration.
+prompt-cache entries are also matched by adapter configuration. As of the
+b11906 upstream base, decision models disable RAM prompt caching by default;
+pass an explicit nonzero `--cache-ram N` (MiB) to enable it for JEV. Slot-local
+prefix reuse and the disk snapshot API are separate from that RAM cache.
 
 When `--jev-dir` is enabled, `POST /slots/<id>?action=save` saves an adjacent
 `<filename>.lora.json` compatibility record for each slot snapshot. Restore

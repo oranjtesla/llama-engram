@@ -3522,6 +3522,7 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
             params.server_connect_code = val;
         }
     ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_CONNECT_CODE"));
+    add_opt(common_arg(
         {"--jev-dir"}, "PATH",
         "directory containing JEV classifier head and calibration",
         [](common_params & params, const std::string & value) {

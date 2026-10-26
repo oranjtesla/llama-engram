@@ -3219,6 +3219,8 @@ private:
                     if (!save_slot_draft(filepath, *slot, nwrite_dft)) {
                         send_error(task, "Unable to save slot: incomplete draft state", ERROR_TYPE_SERVER);
                         break;
+                    }
+
                     if (!params_base.jev_dir.empty()) {
                         try {
                             server_slot_lora_save(filepath, slot->lora.empty() ? params_base.lora_adapters : slot->lora);
